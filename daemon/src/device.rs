@@ -1525,7 +1525,13 @@ impl<'a> Device<'a> {
                     self.fader_pause_until[fader].until = volume;
                 }
             }
+            GoXLRCommand::SetRoutingVolume(input, output, volume) => {
+                if volume > 0x20 {
+                    bail!("Volume shouldn't be greater then 32");
+                }
 
+                self.apply_channel_routing_volume(input, output, volume)?;
+            }
             GoXLRCommand::SetCoughMuteFunction(mute_function) => {
                 if self.profile.get_chat_mute_button_behaviour() == mute_function {
                     // Settings are the same..
@@ -2516,6 +2522,54 @@ impl<'a> Device<'a> {
         result
     }
 
+    fn apply_channel_routing_volume(
+        &mut self,
+        input: BasicInputDevice,
+        output: BasicOutputDevice,
+        volume: u8
+    ) -> Result<()> {
+        //Only accept values between 0x00 and 0x20
+        if volume > 0x20 {
+            return Ok(())
+        }
+
+        // Load the routing for this channel from the profile..
+        let router = self.profile.get_router(input);
+        let (left_input, right_input) = InputDevice::from_basic(&input);
+        let (left_output, right_output) = OutputDevice::from_basic(&output);
+        let mut left = [0; 22];
+        let mut right = [0; 22];
+
+        //for output_device in BasicOutputDevice::iter() {
+        //    if output == output_device && router[output_device] {
+        //        left[left_output.position()] = volume;
+        //        right[right_output.position()] = volume;
+        //    } else if router[output_device] {
+        //        let (left_output, right_output) = OutputDevice::from_basic(&output_device);
+        //
+        //        left[left_output.position()] = 0x20;
+        //        right[right_output.position()] = 0x20;
+        //    }
+        //}
+
+        for output_device in BasicOutputDevice::iter() {
+            if router[output_device] {
+                let (left_output, right_output) = OutputDevice::from_basic(&output_device);
+
+                left[left_output.position()] = volume;
+                right[right_output.position()] = volume;
+            }
+        }
+
+        self.apply_hardtune(input, &mut left, &mut right)?;
+        self.goxlr.set_routing(left_input, left)?;
+        self.goxlr.set_routing(right_input, right)?;
+
+        info!("Routing Volume changed to: {}", volume);
+
+        Ok(())
+    }
+
     // This applies routing for a single input channel..
     fn apply_channel_routing(
         &mut self,
@@ -2535,6 +2589,19 @@ impl<'a> Device<'a> {
             }
         }
 
+        self.apply_hardtune(input, &mut left, &mut right)?;
+        self.goxlr.set_routing(left_input, left)?;
+        self.goxlr.set_routing(right_input, right)?;
+
+        Ok(())
+    }
+
+    fn apply_hardtune(
+        &mut self,
+        input: BasicInputDevice,
+        left: &mut [u8;22],
+        right: &mut [u8;22]
+    ) -> Result<()> {
         // We need to handle hardtune configuration here as well..
         let hardtune_position = OutputDevice::HardTune.position();
         if self.profile.is_active_hardtune_source_all() {
@@ -2557,9 +2624,6 @@ impl<'a> Device<'a> {
                 right[hardtune_position] = 0x10;
             }
         }
-
-        self.goxlr.set_routing(left_input, left)?;
-        self.goxlr.set_routing(right_input, right)?;
 
         Ok(())
     }
