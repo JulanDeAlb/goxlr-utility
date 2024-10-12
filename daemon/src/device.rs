@@ -140,6 +140,7 @@ impl<'a> Device<'a> {
         debug!("--- DEVICE INFO ---");
         debug!("Firmware: {:?}", hardware.versions.firmware);
         debug!("DICE: {:?}", hardware.versions.dice);
+        debug!("Driver: {:?}", hardware.versions.dice);
         debug!("Type: {:?}", hardware.device_type);
         debug!("-------------------");
 
