@@ -1021,6 +1021,11 @@ pub async fn run_cli() -> Result<()> {
                             .command(&serial, GoXLRCommand::SetLockFaders(*enabled))
                             .await?;
                     }
+                    DeviceSettings::AdvancedRouting { enabled } => {
+                        client
+                            .command(&serial, GoXLRCommand::SetAdvancedRouting(*enabled))
+                            .await?;
+                    }
                 },
             }
         }

@@ -255,11 +255,6 @@ impl ProfileAdapter {
 
         let value = if enabled { 8192 } else { 0 };
 
-        // Before we do anything before we do anything, make sure it's valid..
-        if input == InputDevice::Chat && output == OutputDevice::ChatMic {
-            bail!("Invalid Route: Chat -> Chat Mic");
-        }
-
         // Before we do anything, are we changing Headphones while they're not the active Monitor?
         if monitoring != OutputDevice::Headphones && output == OutputDevice::Headphones {
             // In this scenario, we don't update the actual routing table, we just update the
