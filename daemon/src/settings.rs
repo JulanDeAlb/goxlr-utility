@@ -450,6 +450,21 @@ impl SettingsHandle {
         true
     }
 
+    pub async fn get_device_advanced_routing(&self, device_serial: &str) -> bool {
+        let settings = self.settings.read().await;
+        let value = settings
+            .devices
+            .as_ref()
+            .unwrap()
+            .get(device_serial)
+            .map(|d| d.advanced_routing.unwrap_or(false));
+
+        if let Some(value) = value {
+            return value;
+        }
+        true
+    }
+
     pub async fn get_enable_monitor_with_fx(&self, device_serial: &str) -> bool {
         let settings = self.settings.read().await;
         let value = settings
@@ -618,6 +633,17 @@ impl SettingsHandle {
         entry.lock_faders = Some(setting);
     }
 
+    pub async fn set_device_advanced_routing(&self, device_serial: &str, setting: bool) {
+        let mut settings = self.settings.write().await;
+        let entry = settings
+            .devices
+            .as_mut()
+            .unwrap()
+            .entry(device_serial.to_owned())
+            .or_insert_with(DeviceSettings::default);
+        entry.advanced_routing = Some(setting);
+    }
+
     pub async fn set_enable_monitor_with_fx(&self, device_serial: &str, setting: bool) {
         let mut settings = self.settings.write().await;
         let entry = settings
@@ -769,6 +795,9 @@ struct DeviceSettings {
     // Disables the Movement of the Faders when Muting to All (full device only)
     lock_faders: Option<bool>,
 
+    // Enables the ability to route Chat-ChatMic while active. Resets to false on deactivation
+    advanced_routing: Option<bool>,
+
     // Enable Monitoring when FX are Enabled
     enable_monitor_with_fx: Option<bool>,
 
@@ -794,6 +823,7 @@ impl Default for DeviceSettings {
             sampler_pre_buffer: None,
             chat_mute_mutes_mic_to_chat: Some(true),
             lock_faders: Some(false),
+            advanced_routing: Some(false),
             enable_monitor_with_fx: Some(false),
             sampler_reset_on_clear: Some(true),
 

@@ -270,6 +270,7 @@ pub enum GoXLRCommand {
     SetMonitorWithFx(bool),
     SetSamplerResetOnClear(bool),
     SetLockFaders(bool),
+    SetAdvancedRouting(bool),
     SetVodMode(VodMode),
 
     // These control the current GoXLR 'State'..

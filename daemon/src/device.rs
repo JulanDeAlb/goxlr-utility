@@ -277,6 +277,7 @@ impl<'a> Device<'a> {
             .await;
 
         let locked_faders = self.settings.get_device_lock_faders(self.serial()).await;
+        let advanced_routing = self.settings.get_device_advanced_routing(self.serial()).await;
         let vod_mode = self.settings.get_device_vod_mode(self.serial()).await;
 
         let submix_supported = self.device_supports_submixes();
@@ -298,6 +299,13 @@ impl<'a> Device<'a> {
 
         let is_mini = self.hardware.device_type == DeviceType::Mini;
 
+        let mut router = self.profile.create_router();
+
+        // Disable showing enabled routing when advanced_routing is deactivated.
+        if !self.settings.get_device_advanced_routing(self.serial()).await {
+            router[goxlr_types::InputDevice::Chat][goxlr_types::OutputDevice::ChatMic] = false;
+        }
+
         MixerStatus {
             hardware: self.hardware.clone(),
             shutdown_commands,
@@ -313,7 +321,7 @@ impl<'a> Device<'a> {
                 bleep: self.mic_profile.bleep_level(),
                 deess: self.mic_profile.get_deesser(),
             },
-            router: self.profile.create_router(),
+            router,
             mic_status: MicSettings {
                 mic_type: self.mic_profile.mic_type(),
                 mic_gains: self.mic_profile.mic_gains(),
@@ -347,6 +355,7 @@ impl<'a> Device<'a> {
                 enable_monitor_with_fx: monitor_with_fx,
                 reset_sampler_on_clear: sampler_reset_on_clear,
                 lock_faders: locked_faders,
+                advanced_routing: advanced_routing,
                 vod_mode,
             },
             button_down: button_states,
@@ -417,6 +426,7 @@ impl<'a> Device<'a> {
                 | GoXLRCommand::SetMonitorWithFx(_)
                 | GoXLRCommand::SetSamplerResetOnClear(_)
                 | GoXLRCommand::SetLockFaders(_)
+                | GoXLRCommand::SetAdvancedRouting(_)
                 => {
                     if !avoid_write {
                         let _ = self.perform_command(command).await;
@@ -1838,6 +1848,15 @@ impl<'a> Device<'a> {
             }
             GoXLRCommand::SetRouter(input, output, enabled) => {
                 debug!("Setting Routing: {:?} {:?} {}", input, output, enabled);
+                let advanced_routing = self.settings.get_device_advanced_routing(self.serial()).await;
+
+                if !advanced_routing {
+                    // Before we do anything before we do anything, make sure it's valid..
+                    if input == goxlr_types::InputDevice::Chat && output == goxlr_types::OutputDevice::ChatMic {
+                        bail!("Invalid Route: Chat -> Chat Mic");
+                    }
+                }
+
                 self.profile.set_routing(input, output, enabled)?;
 
                 // Apply the change..
@@ -2796,6 +2815,19 @@ impl<'a> Device<'a> {
                 }
             }
 
+            GoXLRCommand::SetAdvancedRouting(value) => {
+                let current = self.settings.get_device_advanced_routing(self.serial()).await;
+
+                if current != value {
+                    self.settings
+                        .set_device_advanced_routing(self.serial(), value)
+                        .await;
+                    
+                    // Apply routing as it's recheck if advanced_routing is active
+                    self.apply_routing(goxlr_types::InputDevice::Chat).await?;
+                }
+            }
+
             GoXLRCommand::SetVodMode(value) => {
                 let serial = self.serial();
 
@@ -3105,13 +3137,13 @@ impl<'a> Device<'a> {
     async fn apply_routing(&mut self, input: BasicInputDevice) -> Result<()> {
         // Load the routing for this channel from the profile..
         let mut router = self.profile.get_router(input);
+        let serial = self.hardware.serial_number.as_str();
 
         // Before we apply transient routing (especially because mic), check whether we should
         // be forcing Mic -> Headphones to 'On' due to settings..
         if input == BasicInputDevice::Microphone {
             // If the mic is muted, transient routing will forcefully disable this, so we should
             // be safe to simply set it true here, and hope for the best :D
-            let serial = self.hardware.serial_number.as_str();
             if self.settings.get_enable_monitor_with_fx(serial).await {
                 // We need to adjust this based on the FX state..
                 if self.profile.is_fx_enabled() {
@@ -3132,6 +3164,14 @@ impl<'a> Device<'a> {
         }
 
         self.apply_transient_routing(input, &mut router).await?;
+
+        // We need to check that each profile saved with routes that rely on "AdvancedRouting"
+        // reset those routes when its deactivated.
+        let advanced_routing = self.settings.get_device_advanced_routing(serial).await;
+        if input == BasicInputDevice::Chat && router[BasicOutputDevice::ChatMic] {
+            router[BasicOutputDevice::ChatMic] = advanced_routing;
+        }
+
         debug!("Applying Routing to {:?}:", input);
         debug!("{:?}", router);
 

@@ -398,6 +398,7 @@ pub struct Settings {
     pub enable_monitor_with_fx: bool,
     pub reset_sampler_on_clear: bool,
     pub lock_faders: bool,
+    pub advanced_routing: bool,
     pub vod_mode: VodMode,
 }
 

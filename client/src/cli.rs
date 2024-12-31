@@ -1165,4 +1165,11 @@ pub enum DeviceSettings {
         #[arg(value_parser, action = ArgAction::Set)]
         enabled: bool,
     },
+
+    /// Enabled full routing control (resets affected routes when deactivated)
+    AdvancedRouting {
+        /// Whether the setting is enabled
+        #[arg(value_parser, action = ArgAction::Set)]
+        enabled: bool,
+    },
 }
